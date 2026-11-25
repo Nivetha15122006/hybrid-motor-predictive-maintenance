@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hybrid Equipment Telemetry & Predictive Maintenance</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #131c31;
+      --border: #26334d;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #10b981;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; }
+    .container { max-width: 1320px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+    header h1 { font-size: 1.45rem; font-weight: 700; }
+    header p { color: var(--muted); font-size: 0.88rem; margin-top: 3px; }
+    .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+    button { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.84rem; font-weight: 500; transition: 0.2s; }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    .grid { display: grid; grid-template-columns: 320px 1fr; gap: 18px; }
+    @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .card h2 { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+    .control { margin-bottom: 15px; }
+    .control-header { display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 5px; }
+    .val { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 8px 10px; border-radius: 8px; font-size: 0.88rem; }
+    .metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
+    @media (max-width: 780px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+    .metric-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .metric-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+    .metric-value { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .metric-sub { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
+    .status-banner { padding: 14px 18px; border-radius: 10px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; border: 1px solid; }
+    .status-ok { background: rgba(16, 185, 129, 0.12); border-color: var(--ok); color: #6ee7b7; }
+    .status-danger { background: rgba(239, 68, 68, 0.15); border-color: var(--danger); color: #fca5a5; }
+    .plain-summary { background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.9rem; line-height: 1.5; color: #e2e8f0; }
+    .plain-summary strong { color: var(--accent); }
+    .alert-item { background: rgba(245, 158, 11, 0.12); border-left: 4px solid var(--warn); padding: 9px 13px; border-radius: 6px; margin-bottom: 10px; font-size: 0.86rem; color: #fde68a; }
+    .charts-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 16px; }
+    @media (max-width: 820px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    .chart-title { font-size: 0.82rem; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+    .bar-row { margin-bottom: 10px; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px; color: var(--muted); }
+    .bar-bg { background: var(--bg); height: 7px; border-radius: 99px; overflow: hidden; }
+    .bar-fill { background: linear-gradient(90deg, #0284c7, #38bdf8); height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Equipment Telemetry & Health Monitor</h1>
+        <p>Hybrid ML + Deep Learning Diagnostics (Random Forest + Neural Autoencoder)</p>
+      </div>
+      <div class="presets">
+        <button onclick="setPreset('normal')">Simulate Normal</button>
+        <button onclick="setPreset('heat')">Simulate Heat Fault</button>
+        <button onclick="setPreset('drift')">Simulate Zero-Day Drift</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Left Controls -->
+      <div class="card">
+        <h2>Live Sensor Telemetry</h2>
+
+        <div class="control">
+          <div class="control-header"><span>Machine Quality Grade</span></div>
+          <select id="machine_type" onchange="runPredict()">
+            <option value="L">L — Low Grade (200m limit)</option>
+            <option value="M" selected>M — Medium Grade (220m limit)</option>
+            <option value="H">H — High Grade (240m limit)</option>
+          </select>
+        </div>
+
+        <div class="control">
+          <div class="control-header"><span>Air Temperature</span><span class="val" id="v_air">300.0 K</span></div>
+          <input type="range" id="air_temp" min="295" max="305" step="0.1" value="300.0" oninput="runPredict()" />
+        </div>
+
+        <div class="control">
+          <div class="control-header"><span>Process Temperature</span><span class="val" id="v_proc">310.0 K</span></div>
+          <input type="range" id="proc_temp" min="305" max="315" step="0.1" value="310.0" oninput="runPredict()" />
+        </div>
+
+        <div class="control">
+          <div class="control-header"><span>Rotational Speed</span><span class="val" id="v_rpm">1500 RPM</span></div>
+          <input type="range" id="rpm" min="1100" max="2900" step="10" value="1500" oninput="runPredict()" />
+        </div>
+
+        <div class="control">
+          <div class="control-header"><span>Torque</span><span class="val" id="v_torque">40.0 Nm</span></div>
+          <input type="range" id="torque" min="3" max="80" step="0.5" value="40.0" oninput="runPredict()" />
+        </div>
+
+        <div class="control">
+          <div class="control-header"><span>Cumulative Tool Wear</span><span class="val" id="v_wear">110 min</span></div>
+          <input type="range" id="tool_wear" min="0" max="250" step="5" value="110" oninput="runPredict()" />
+        </div>
+
+        <h2 style="margin-top: 22px;">Model Feature Drivers</h2>
+        <div id="importance_bars"></div>
+      </div>
+
+      <!-- Right Diagnostics & Graphs -->
+      <div class="card">
+        <h2>Hybrid Diagnostics Output</h2>
+
+        <div class="metrics">
+          <div class="metric-box">
+            <div class="metric-label">Failure Probability</div>
+            <div class="metric-value" id="m_prob">--%</div>
+            <div class="metric-sub">Alert if ≥ 50%</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Anomaly Drift Score</div>
+            <div class="metric-value" id="m_anom">--x</div>
+            <div class="metric-sub">Normal ≤ 1.25x</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Remaining Tool Life</div>
+            <div class="metric-value" id="m_life">--%</div>
+            <div class="metric-sub">Wear budget left</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Mechanical Power</div>
+            <div class="metric-value" id="m_power">-- W</div>
+            <div class="metric-sub">Safe: 3.5k–9.0k W</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Thermal Gradient</div>
+            <div class="metric-value" id="m_temp">-- K</div>
+            <div class="metric-sub">Safe: ≥ 8.6 K</div>
+          </div>
+        </div>
+
+        <div id="status_banner" class="status-banner status-ok">
+          <span id="status_text">STATUS: NORMAL OPERATION</span>
+          <span id="status_badge">HEALTHY</span>
+        </div>
+
+        <!-- Plain English Explanation Box -->
+        <div class="plain-summary" id="plain_summary">
+          Analyzing live telemetry...
+        </div>
+
+        <div id="alerts_container"></div>
+
+        <!-- Graphs Section -->
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-title">Live Telemetry Risk & Anomaly History (Last 12 Readings)</div>
+            <canvas id="trendChart" height="175"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Sensor Profile vs. Healthy Baseline</div>
+            <canvas id="radarChart" height="175"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const historyLabels = [];
+    const riskHistory = [];
+    const anomalyHistory = [];
+
+    // 1. Live Trend Line Chart
+    const trendChart = new Chart(document.getElementById('trendChart'), {
+      type: 'line',
+      data: {
+        labels: historyLabels,
+        datasets: [
+          {
+            label: 'Failure Risk (%)',
+            data: riskHistory,
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            tension: 0.35,
+            fill: true,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Anomaly Score (x)',
+            data: anomalyHistory,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            tension: 0.35,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 11 } } } },
+        scales: {
+          x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+          y: { type: 'linear', position: 'left', min: 0, max: 100, ticks: { color: '#ef4444' }, grid: { color: '#1e293b' } },
+          y1: { type: 'linear', position: 'right', min: 0, suggestedMax: 5, ticks: { color: '#38bdf8' }, grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+
+    // 2. Sensor Deviation Radar Chart
+    const radarChart = new Chart(document.getElementById('radarChart'), {
+      type: 'radar',
+      data: {
+        labels: ['Air Temp', 'Process Temp', 'Speed (RPM)', 'Torque', 'Tool Wear'],
+        datasets: [
+          {
+            label: 'Healthy Baseline',
+            data: [50, 50, 22, 48, 44],
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.12)',
+            pointRadius: 2
+          },
+          {
+            label: 'Current Machine',
+            data: [50, 50, 22, 48, 44],
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.25)',
+            pointRadius: 3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 11 } } } },
+        scales: {
+          r: {
+            min: 0,
+            max: 100,
+            ticks: { display: false },
+            grid: { color: '#26334d' },
+            angleLines: { color: '#26334d' },
+            pointLabels: { color: '#94a3b8', font: { size: 11 } }
+          }
+        }
+      }
+    });
+
+    function setPreset(type) {
+      if (type === 'normal') {
+        document.getElementById('machine_type').value = 'M';
+        document.getElementById('air_temp').value = 300.0;
+        document.getElementById('proc_temp').value = 310.0;
+        document.getElementById('rpm').value = 1500;
+        document.getElementById('torque').value = 40.0;
+        document.getElementById('tool_wear').value = 110;
+      } else if (type === 'heat') {
+        document.getElementById('machine_type').value = 'L';
+        document.getElementById('air_temp').value = 302.5;
+        document.getElementById('proc_temp').value = 310.2;
+        document.getElementById('rpm').value = 1280;
+        document.getElementById('torque').value = 58.0;
+        document.getElementById('tool_wear').value = 140;
+      } else if (type === 'drift') {
+        document.getElementById('machine_type').value = 'M';
+        document.getElementById('air_temp').value = 304.2;
+        document.getElementById('proc_temp').value = 306.0;
+        document.getElementById('rpm').value = 2820;
+        document.getElementById('torque').value = 6.0;
+        document.getElementById('tool_wear').value = 45;
+      }
+      runPredict();
+    }
+
+    async function runPredict() {
+      const payload = {
+        machine_type: document.getElementById('machine_type').value,
+        air_temp: parseFloat(document.getElementById('air_temp').value),
+        proc_temp: parseFloat(document.getElementById('proc_temp').value),
+        rpm: parseInt(document.getElementById('rpm').value),
+        torque: parseFloat(document.getElementById('torque').value),
+        tool_wear: parseInt(document.getElementById('tool_wear').value)
+      };
+
+      document.getElementById('v_air').innerText = payload.air_temp.toFixed(1) + ' K';
+      document.getElementById('v_proc').innerText = payload.proc_temp.toFixed(1) + ' K';
+      document.getElementById('v_rpm').innerText = payload.rpm + ' RPM';
+      document.getElementById('v_torque').innerText = payload.torque.toFixed(1) + ' Nm';
+      document.getElementById('v_wear').innerText = payload.tool_wear + ' min';
+
+      const res = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      document.getElementById('m_prob').innerText = data.failure_prob + '%';
+      document.getElementById('m_prob').style.color = data.failure_prob >= 50 ? '#ef4444' : '#10b981';
+
+      document.getElementById('m_anom').innerText = data.anomaly_index.toFixed(2) + 'x';
+      document.getElementById('m_anom').style.color = data.anomaly_index > 1.25 ? '#f59e0b' : '#38bdf8';
+
+      document.getElementById('m_life').innerText = data.remaining_life + '%';
+      document.getElementById('m_power').innerText = Math.round(data.power_w) + ' W';
+      document.getElementById('m_temp').innerText = data.temp_diff.toFixed(1) + ' K';
+
+      const banner = document.getElementById('status_banner');
+      banner.className = 'status-banner ' + (data.is_danger ? 'status-danger' : 'status-ok');
+      document.getElementById('status_text').innerText = 'STATUS: ' + data.status;
+      document.getElementById('status_badge').innerText = data.is_danger ? 'ACTION REQUIRED' : 'HEALTHY';
+
+      // Plain-English Operator Summary
+      const summaryEl = document.getElementById('plain_summary');
+      if (data.failure_prob >= 50) {
+        summaryEl.innerHTML = `<strong>Operator Summary:</strong> Immediate breakdown risk is high (${data.failure_prob}%), and sensor behavior is ${data.anomaly_index}x outside normal baseline. <strong>Recommended Action:</strong> Pause operation and inspect the flagged subsystem below before continuing.`;
+      } else if (data.anomaly_index > 1.25) {
+        summaryEl.innerHTML = `<strong>Operator Summary:</strong> No immediate breakdown pattern matched (${data.failure_prob}% risk), but the Neural Autoencoder detected unusual operating drift (${data.anomaly_index}x above baseline). <strong>Recommended Action:</strong> Monitor closely for early-stage component wear.`;
+      } else {
+        summaryEl.innerHTML = `<strong>Operator Summary:</strong> Machine is operating smoothly within normal thermal and power limits (${data.failure_prob}% failure risk, ${data.remaining_life}% tool life remaining). <strong>Recommended Action:</strong> Continue normal production.`;
+      }
+
+      const alertsDiv = document.getElementById('alerts_container');
+      alertsDiv.innerHTML = data.alerts.map(a => `<div class="alert-item">${a}</div>`).join('');
+
+      const sortedImp = Object.entries(data.importances).sort((a, b) => b[1] - a[1]);
+      document.getElementById('importance_bars').innerHTML = sortedImp.map(([k, v]) => `
+        <div class="bar-row">
+          <div class="bar-label"><span>${k}</span><span>${v}%</span></div>
+          <div class="bar-bg"><div class="bar-fill" style="width: ${Math.min(v * 2.5, 100)}%"></div></div>
+        </div>
+      `).join('');
+
+      // Update Live Trend Chart
+      const now = new Date().toLocaleTimeString([], { hour12: false, minute: '2-digit', second: '2-digit' });
+      historyLabels.push(now);
+      riskHistory.push(data.failure_prob);
+      anomalyHistory.push(data.anomaly_index);
+      if (historyLabels.length > 12) {
+        historyLabels.shift();
+        riskHistory.shift();
+        anomalyHistory.shift();
+      }
+      trendChart.update();
+
+      // Update Radar Chart (normalize sliders to 0-100 scale)
+      radarChart.data.datasets[1].data = [
+        ((payload.air_temp - 295) / 10) * 100,
+        ((payload.proc_temp - 305) / 10) * 100,
+        ((payload.rpm - 1100) / 1800) * 100,
+        ((payload.torque - 3) / 77) * 100,
+        (payload.tool_wear / 250) * 100
+      ];
+      radarChart.update();
+    }
+
+    runPredict();
+  </script>
+</body>
+</html>
